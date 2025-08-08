@@ -1,0 +1,64 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: Lambda function to decode OTLP Protobuf metrics from a Kinesis Firehose stream.
+
+Parameters:
+  TargetFunctionNames:
+    Type: String
+    Description: A comma-separated list of Lambda function names to transform metrics for.
+  AttributeKey:
+    Type: String
+    Description: The key for the custom attribute to add (e.g., env).
+  AttributeValue:
+    Type: String
+    Description: The value for the custom attribute to add (e.g., dev).
+
+Resources:
+  # OtlpParserLayer:
+  #   Type: AWS::Serverless::LayerVersion
+  #   Properties:
+  #     LayerName: otlp-parser-layer
+  #     Description: Dependencies for OTLP Protobuf parsing (opentelemetry-proto, protobuf)
+  #     ContentUri: layers/otlp_parser/
+  #     CompatibleRuntimes:
+  #       - python3.12
+  #     LicenseInfo: Apache-2.0
+  #     RetentionPolicy: Retain
+  #   Metadata:
+  #     BuildMethod: python3.12
+
+  OtlpDecoderFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: otlp-metrics-decoder
+      Runtime: python3.12
+      Handler: lambda_function.handler
+      CodeUri: src/otlp_decoder_function/
+      MemorySize: 256
+      Timeout: 60
+      Environment:
+        Variables:
+          TARGET_FUNCTION_NAMES: !Ref TargetFunctionNames
+          ATTRIBUTE_KEY: !Ref AttributeKey
+          ATTRIBUTE_VALUE: !Ref AttributeValue
+      # Layers:
+      #   - !Ref OtlpParserLayer
+      Policies:
+        - AWSLambdaKinesisExecutionRole
+      Tags:
+        owner: kmullaney
+        reason: testing
+        description: firehose transformation
+    Metadata:
+      BuildMethod: python3.12
+
+  OtlpDecoderFunctionLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub /aws/lambda/${OtlpDecoderFunction}
+      RetentionInDays: 7
+
+Outputs:
+  FunctionArn:
+    Description: ARN of the OTLP Decoder Lambda Function
+    Value: !GetAtt OtlpDecoderFunction.Arn
